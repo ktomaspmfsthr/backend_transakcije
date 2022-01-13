@@ -1,5 +1,6 @@
 const express = require('express')
 const cors = require('cors')
+const Transakcija = require('./models/transakcija')
 const app = express()
 app.use(cors())
 app.use(express.json())
@@ -25,58 +26,69 @@ app.get('/', (req, res) =>{
  res.send('<h1>Pozdrav od Express servera</h1>')
 })
 
-app.get('/api/transakcije', (req, res) =>{
- res.json(transakcije)
+app.get('/api/transakcije', (req, res) =>
+{
+ Transakcija.find({}).then( rezultat =>
+{
+    res.json(rezultat)
+  })
 })
 
-app.get('/api/transakcije/:id', (req, res) =>{
-    const id = Number(req.params.id)
-    const transakcija = transakcije.find(t => t.id === id)
-    
-    if (transakcija){
-      res.json(transakcija)
-    } else {
-      res.status(404).end()
-    }
+app.get('/api/transakcije/:id', (req, res, next) =>{
+    Transakcija.findById(req.params.id)
+    .then(transakcija => {
+      if (transakcija) {
+        res.json(transakcija)
+      } else {
+        res.status(404).end()
+      }
+
+    })
+    .catch(error => next(error))
   })
 
 app.delete('/api/transakcije/:id', (req, res) => {
-    const id = Number(req.params.id)
-    transakcije = transakcije.filter(t => t.id !== id)
-  
-    res.status(204).end()
+    Transakcija.findByIdAndRemove(req.params.id)
+    .then(result => {
+      res.status(204).end()
+    })
+    .catch(err => next(err))
 })
   
-app.post('/api/transakcije', (req, res) => {
+app.post('/api/transakcije', (req, res, next) => {
 
     const podatak = req.body
-    /*if(!podatak.iznos){
-      return res.status(400).json({
-        error: 'Nedostaje iznos'
-      })
-    }*/
+
+    const transakcija = new Transakcija({
+      vrsta: podatak.vrsta,
+      datum: new Date(),
+      opis: podatak.opis,
+      iznos: podatak.iznos
+    })
     
-    let transakcija = {
-        id: generirajId(),
-        vrsta: podatak.vrsta,
-        datum: podatak.datum,
-        opis: podatak.opis,
-        iznos: podatak.iznos,
-      
-    }
-    transakcije = transakcije.concat(transakcija)
-    
-    res.json(transakcija)
+    transakcija.save()
+    .then(spremljenaTransakcija => {
+      res.json(spremljenaTransakcija)
+    })
+    .catch(err => next(err))
   })
 
-  app.put('/api/poruke/:id', (req, res) => {
+  app.put('/api/transakcije/:id', (req, res) => {
     const podatak = req.body;
-    const id = Number(req.params.id);
+    const id = req.params.id;
 
-    console.log("Promjena važnosti poruke sa ID", id);
+    const transakcija = {
+      vrsta: podatak.vrsta,
+      datum: new Date(),
+      opis: podatak.opis,
+      iznos: podatak.iznos
+    }
 
-    transakcije.map(t => t.id !== id ? t : podatak);
-    res.json(podatak);
+    Transakcija.findbyIdAndUpdate(id, transakcija, {new: true})
+    .then( novaTransakcija => {
+      res.json(novaTransakcija)
+    })
+    .catch(err => next(err))
   })
 
   const generirajId = () => {
@@ -86,8 +98,25 @@ app.post('/api/transakcije', (req, res) => {
     return maxId + 1
   }
 
+  const errorHandler = (err, req, res, next) => {
+    console.log(err.message);
+
+    if (err.name === 'CastError') {
+      return res.status(400).send({error: 'krivi format ID-a'})
+    } else if (err.name === 'ValidationError'){
+        return res.status(400).send({error: err.message})
+    }
+    next(err)
+  }
+
+  function zadnjiErrorHandler (err, req, res, next) {
+    res.status(500)
+    res.send('error', { error: err})
+  }
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
  console.log(`Posluzitelj je pokrenut na portu ${PORT}`);
 })
+
+
